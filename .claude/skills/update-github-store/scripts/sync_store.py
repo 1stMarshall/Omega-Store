@@ -3,10 +3,16 @@
 
 Usage:
   python3 -I sync_store.py LIVE_HTML [--repo DIR] [--write] [--expect-out FILE]
+  python3 -I sync_store.py LIVE_HTML --github-index FILE --out DIR [--expect-out FILE]
 
 LIVE_HTML is the full live store page saved by the Artifact tool's read action.
 Without --write it only reports the differences. With --write it rewrites the
 otr-data block in DIR/index.html and decodes new photos into DIR/images/.
+
+Chat mode (no repo checkout): --github-index is the current GitHub index.html and
+--out receives the updated index.html plus only the photos GitHub doesn't have yet.
+A photo counts as already on GitHub when the current GitHub data references it
+(file names are content hashes, so a referenced name means the same bytes).
 
 The result is the live store data with three exceptions:
   - store.storeLink, track, trackAt, trackSalt, trackSig keep the GitHub values;
@@ -70,10 +76,16 @@ def main():
     ap.add_argument('--repo', default='.')
     ap.add_argument('--write', action='store_true')
     ap.add_argument('--expect-out', help='write JSON of products the browser check should find')
+    ap.add_argument('--github-index', help='current GitHub index.html (default: REPO/index.html)')
+    ap.add_argument('--out', help='chat mode: write the updated index.html and new photos here instead of the repo')
     a = ap.parse_args()
 
-    index = os.path.join(a.repo, 'index.html')
+    index = a.github_index or os.path.join(a.repo, 'index.html')
     gtext, gm, gh = load(index)
+    referenced = {p.get('img') for p in gh['products']} | {gh.get('store', {}).get('logo')}
+
+    def on_github(path):
+        return path in referenced if a.out else os.path.exists(os.path.join(a.repo, path))
     ltext, _, live = load(a.live)
     problems, notes, new_files = [], [], {}
 
@@ -92,13 +104,13 @@ def main():
                 problems.append('%s: unrecognised embedded image, left out' % label)
                 return uri
             full = os.path.join(a.repo, path)
-            if os.path.exists(full):
-                if open(full, 'rb').read() != raw:
+            if on_github(path):
+                if not a.out and open(full, 'rb').read() != raw:
                     problems.append('%s: %s exists with different bytes (SHA-1 prefix collision?)' % (label, path))
             else:
                 new_files[path] = raw
             return path
-        if not os.path.exists(os.path.join(a.repo, uri)) and not re.match(r'https?://', uri):
+        if not on_github(uri) and not re.match(r'https?://', uri):
             problems.append('%s: image %s is not in the repo' % (label, uri))
         return uri
 
@@ -179,16 +191,17 @@ def main():
                                                  ({new['store']['logo']} if str(new['store'].get('logo', '')).startswith('images/') else set()))},
                   open(a.expect_out, 'w', encoding='utf8'), ensure_ascii=False, indent=1)
 
-    if a.write and report:
-        os.makedirs(os.path.join(a.repo, 'images'), exist_ok=True)
+    if (a.write or a.out) and report:
+        dest = a.out or a.repo
+        os.makedirs(os.path.join(dest, 'images'), exist_ok=True)
         for path, raw in new_files.items():
-            with open(os.path.join(a.repo, path), 'wb') as fh:
+            with open(os.path.join(dest, path), 'wb') as fh:
                 fh.write(raw)
         out = gtext[:gm.start(2)] + dump(new) + gtext[gm.end(2):]
-        with open(index, 'w', encoding='utf8') as fh:
+        with open(os.path.join(dest, 'index.html') if a.out else index, 'w', encoding='utf8') as fh:
             fh.write(out)
-        print('WROTE index.html and %d new image file(s).' % len(new_files))
-    elif a.write:
+        print('WROTE %s and %d new image file(s).' % (os.path.join(dest, 'index.html'), len(new_files)))
+    elif a.write or a.out:
         print('Nothing written.')
     sys.exit(1 if problems else 0)
 
