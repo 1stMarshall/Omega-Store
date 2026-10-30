@@ -15,7 +15,9 @@ A photo counts as already on GitHub when the current GitHub data references it
 (file names are content hashes, so a referenced name means the same bytes).
 
 The result is the live store data with three exceptions:
-  - store.storeLink, track, trackAt, trackSalt, trackSig keep the GitHub values;
+  - store.storeLink keeps the GitHub value (customer tracking -- track, trackAt,
+    trackSalt, trackSig -- is copied from the live store, which is where the
+    owner presses "Publish order updates");
   - every embedded photo (product img, store logo) is stored as
     images/<first 12 hex chars of SHA-1>.<ext> and referenced by that path;
   - nothing outside the otr-data block is touched.
@@ -30,7 +32,7 @@ import re
 import sys
 
 DATA_RE = re.compile(r'(<script type="application/json" id="otr-data">)(.*?)(</script>)', re.S)
-KEEP_TOP = ['track', 'trackAt', 'trackSalt', 'trackSig']
+TRACK = ['track', 'trackAt', 'trackSalt', 'trackSig']
 KEEP_STORE = ['storeLink']
 EXT = {'jpeg': 'jpg', 'jpg': 'jpg', 'png': 'png', 'webp': 'webp', 'gif': 'gif'}
 PRODUCT_FIELDS = ['name', 'price', 'cat', 'note', 'options', 'options2', 'status', 'img',
@@ -123,11 +125,6 @@ def main():
             new['store'][k] = gh['store'][k]
         else:
             new['store'].pop(k, None)
-    for k in KEEP_TOP:
-        if k in gh:
-            new[k] = gh[k]
-        else:
-            new.pop(k, None)
 
     # ---- report ----
     report = []
@@ -154,7 +151,7 @@ def main():
     if [p['id'] for p in gh['products'] if p['id'] in np_] != [p['id'] for p in new['products'] if p['id'] in gp]:
         report.append('REORDERED products (order now follows the live store)')
     for k in sorted(set(new) | set(gh)):
-        if k in ('products',) or k in KEEP_TOP:
+        if k in ('products',) or k in TRACK:
             continue
         if isinstance(new.get(k), dict) and isinstance(gh.get(k), dict):
             for kk in sorted(set(new[k]) | set(gh[k])):
@@ -162,8 +159,16 @@ def main():
                     report.append('FIELD   %s.%s: %s -> %s' % (k, kk, short(gh[k].get(kk)), short(new[k].get(kk))))
         elif new.get(k) != gh.get(k):
             report.append('FIELD   %s: %s -> %s' % (k, short(gh.get(k)), short(new.get(k))))
-    kept = [k for k in KEEP_TOP if live.get(k) != gh.get(k)] + \
-           ['store.' + k for k in KEEP_STORE if live.get('store', {}).get(k) != gh.get('store', {}).get(k)]
+    if [new.get(k) for k in TRACK] != [gh.get(k) for k in TRACK]:
+        import datetime
+        def when(ms):
+            return datetime.datetime.fromtimestamp(ms / 1000, datetime.timezone.utc).strftime('%d %b %Y %H:%M UTC') if ms else 'never'
+        report.append('TRACKING customer order tracking updated: %d records, published %s -> %d records, published %s' % (
+            len(gh.get('track') or []), when(gh.get('trackAt')), len(new.get('track') or []), when(new.get('trackAt'))))
+        if (gh.get('trackAt') or 0) > (new.get('trackAt') or 0):
+            problems.append('GitHub tracking (%s) is newer than the live store (%s). Not expected; check before writing.' % (
+                when(gh.get('trackAt')), when(new.get('trackAt'))))
+    kept = ['store.' + k for k in KEEP_STORE if live.get('store', {}).get(k) != gh.get('store', {}).get(k)]
     nulls = sum(1 for i, p in np_.items() if i in gp for f in set(p) ^ set(gp[i]) if p.get(f) is None and gp[i].get(f) is None)
     if nulls and report:
         notes.append('Note: %d empty field(s) (null vs missing, e.g. "variantOf":null) also follow the live store; the page treats them the same.' % nulls)

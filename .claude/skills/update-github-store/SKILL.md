@@ -16,7 +16,8 @@ product's `img` (and the store `logo`) holds that path.
 ## Rules
 
 - Copy store data only: products (new, removed, and changed name, price, category, note, options, status, photo, variant fields), store text, batch, contact and `nextId`.
-- Keep GitHub's own `store.storeLink`, `track`, `trackAt`, `trackSalt` and `trackSig`. Never copy those from the live store.
+- Keep GitHub's own `store.storeLink`. Never copy it from the live store.
+- Copy customer order tracking (`track`, `trackAt`, `trackSalt`, `trackSig`) from the live store. The owner publishes tracking there with **Publish order updates**; without this step customers on GitHub can't find new orders.
 - Never change the page code, `<head>` tags, icons, `share.jpg` or `.nojekyll`. Never edit, recompress or resize photos. Decode them byte for byte.
 - Push straight to `main`. Don't leave the work on another branch, and don't open a PR unless asked.
 
@@ -39,7 +40,8 @@ Run the commands from the repo root. `$K` is `.claude/skills/update-github-store
    It prints every ADDED, CHANGED and REMOVED product, each FIELD change, and each NEW FILE photo.
    - `NO DIFFERENCES` means GitHub already matches. Tell the user and stop; there's nothing to commit.
    - A `PROBLEM` line makes the script exit with status 1. Show it to the user. In particular, "page code differs" means the live page's HTML/CSS/JS changed. This skill doesn't copy that, so ask the user before doing anything about it. Store data can still be synced.
-   - "Kept GitHub values for: track..." is expected, not a problem.
+   - "Kept GitHub values for: store.storeLink" is expected, not a problem.
+   - A `TRACKING` line means customer order tracking changed. It counts as a difference on its own, so sync even when no product changed.
 
 4. **Apply.** Run the same command with `--write` added. Then confirm that `git status` shows only `index.html` and new `images/*` files, and that `git diff -U0 index.html | grep '^@@'` shows a single changed line (the data line).
 
@@ -61,7 +63,7 @@ Run the commands from the repo root. `$K` is `.claude/skills/update-github-store
 7. **Report to the user.**
    - Every product added, changed or removed, as #number, name, category and price. For a change, say what changed (old → new).
    - Any store, batch or contact text changes, and the old → new `nextId`.
-   - That `storeLink` and the tracking values were kept.
+   - That `storeLink` was kept, and whether customer order tracking was updated (record count and publish time from the `TRACKING` line).
    - The browser check result.
    - The commit hash on `main`, and that GitHub Pages takes a minute or two to update.
 

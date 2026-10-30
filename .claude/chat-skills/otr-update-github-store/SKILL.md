@@ -13,7 +13,8 @@ Chat can't push to GitHub. This skill builds the exact files to upload, checks t
 
 ## Rules
 - Copy store data only: products (new, removed, and changed name, price, category, note, options, status, photo, variant fields), store text, batch, contact and `nextId`.
-- Keep GitHub's own `store.storeLink`, `track`, `trackAt`, `trackSalt` and `trackSig`. Never take those from the live store.
+- Keep GitHub's own `store.storeLink`. Never take it from the live store.
+- Copy customer order tracking (`track`, `trackAt`, `trackSalt`, `trackSig`) from the live store. The owner publishes tracking there with **Publish order updates**; without this step customers on GitHub can't find new orders.
 - Never change page code, `<head>` tags, icons or `share.jpg`. Never edit, crop or recompress photos. They are decoded byte for byte.
 - Never edit the live store in this skill. It only reads it.
 
@@ -39,7 +40,8 @@ Work in `/tmp/otr-sync`. The scripts are in this skill's `scripts/` folder. Find
    - The output lists every ADDED, CHANGED and REMOVED product, each FIELD change, and each NEW FILE photo.
    - `NO DIFFERENCES` means GitHub already matches. Tell the owner and stop. Nothing needs uploading.
    - A `PROBLEM` line makes the script exit with status 1. Tell the owner. "Page code differs" means the live page's design or code changed. This skill doesn't copy that, so ask before doing anything about it.
-   - "Kept GitHub values for: track..." is expected.
+   - "Kept GitHub values for: store.storeLink" is expected.
+   - A `TRACKING` line means customer order tracking changed. It counts as a difference on its own, so build the update even when no product changed.
    - The output folder gets `index.html` plus an `images/` folder that holds only photos GitHub doesn't have yet.
 
 4. **Check in a headless browser.**
@@ -58,7 +60,7 @@ Work in `/tmp/otr-sync`. The scripts are in this skill's `scripts/` folder. Find
    Keep the unzipped folder too, so the files can also be downloaded one by one on a phone.
 
 6. **Reply to the owner.**
-   - What changed: every product added, changed or removed (#number, name, category, price; for a change, old → new), any store, batch or contact text changes, and nextId old → new. Say that storeLink and tracking were kept.
+   - What changed: every product added, changed or removed (#number, name, category, price; for a change, old → new), any store, batch or contact text changes, and nextId old → new. Say that storeLink was kept, and whether customer order tracking was updated.
    - The files to upload: `index.html`, plus each new photo name.
    - Upload instructions:
      - **On a computer:** go to https://github.com/1stMarshall/Omega-Store and click **Add file → Upload files**. Unzip the download, open the `omega-store-update` folder, and drag both its contents in at once: `index.html` and the `images` folder. Choose **Commit directly to the main branch**, paste the commit message below, and click **Commit changes**.
